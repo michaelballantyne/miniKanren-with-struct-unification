@@ -90,6 +90,10 @@
         ((and (pair? u) (pair? v))
          (let ((s (unify (car u) (car v) s)))
            (and s (unify (cdr u) (cdr v) s))))
+        ((and (struct? u) (struct? v))
+         (let ([lu (vector->list (struct->vector u))]
+               [lv (vector->list (struct->vector v))])
+           (unify lu lv s)))
         ((or (eigen? u) (eigen? v)) #f)
         ((equal? u v) s)
         (else #f)))))
@@ -103,6 +107,9 @@
          (or 
            (occurs-check x (car v) s)
            (occurs-check x (cdr v) s)))
+        ((struct? v)
+         (let ([l (vector->list (struct->vector v))])
+           (occurs-check x l s)))
         (else #f)))))
 
 (define eigen-occurs-check
@@ -115,6 +122,9 @@
          (or 
            (eigen-occurs-check e* (car x) s)
            (eigen-occurs-check e* (cdr x) s)))
+        ((struct? x)
+         (let ([l (vector->list (struct->vector x))])
+           (eigen-occurs-check e* l s)))
         (else #f)))))
 
 (define empty-f (lambdaf@ () (mzero)))
@@ -301,6 +311,10 @@
         ((var? v) v)
         ((pair? v)
          (cons (walk* (car v) S) (walk* (cdr v) S)))
+        ((struct? v)
+         (let-values ([(l) (vector->list (struct->vector v))]
+                      [(info ignore) (struct-info v)])
+           (apply (struct-type-make-constructor info) (walk* (cdr l) S))))
         (else v)))))
 
 (define reify-S
@@ -314,6 +328,9 @@
         ((pair? v)
          (let ((S (reify-S (car v) S)))
            (reify-S (cdr v) S)))
+        ((struct? v)
+         (let ([l (vector->list (struct->vector v))])
+           (reify-S l S)))
         (else S)))))
 
 (define reify-name
@@ -348,6 +365,9 @@
       ((pair? u)
        (or (anyvar? (car u) r)
            (anyvar? (cdr u) r)))
+      ((struct? u)
+         (let ([l (vector->list (struct->vector u))])
+           (anyvar? l r)))
       (else (var? (walk u r))))))
 
 (define anyeigen? 
@@ -356,6 +376,9 @@
       ((pair? u)
        (or (anyeigen? (car u) r)
            (anyeigen? (cdr u) r)))
+      ((struct? u)
+         (let ([l (vector->list (struct->vector u))])
+           (anyeigen? l r)))
       (else (eigen? (walk u r))))))
 
 (define member* 
@@ -364,6 +387,9 @@
       ((equal? u v) #t)
       ((pair? v)
        (or (member* u (car v)) (member* u (cdr v))))
+      ((struct? v)
+         (let ([l (vector->list (struct->vector v))])
+           (member* u l)))
       (else #f))))
 
 ;;;
@@ -447,6 +473,10 @@
         ((and (pair? t1^) (pair? t2^))
          (or (term-ununifiable? S Y N (car t1^) (car t2^))
              (term-ununifiable? S Y N (cdr t1^) (cdr t2^))))
+        ((and (struct? t1^) (struct? t2^))
+         (let ([lu (vector->list (struct->vector t1^))]
+               [lv (vector->list (struct->vector t2^))])
+           (term-ununifiable? S Y N lu lv)))
         (else (not (eqv? t1^ t2^)))))))
 
 (define T-term-ununifiable?
@@ -462,6 +492,9 @@
                                   (term-ununifiable? S Y N t1^ t2^)
                                   (t2-check (car t2^))
                                   (t2-check (cdr t2^))))
+                    ((struct? t2^)
+                     (let ([l (vector->list (struct->vector t2^))])
+                       (t2-check l)))
                     (else (term-ununifiable? S Y N t1^ t2^)))))))
           t2-check)))))
 
@@ -474,7 +507,7 @@
 
 (define sym?
   (lambda (S Y y)
-    (let ((y (walk y S)))          
+    (let ((y (walk y S)))
       (cond
         ((var? y) (tagged? S Y y))
         (else (symbol? y))))))
@@ -494,7 +527,8 @@
                (let ((t2^ (walk (rhs t) S)))
                  (cond
                    ((and (not (untyped-var? S Y N t2^))
-                         (not (pair? t2^)))
+                         (not (pair? t2^))
+                         (not (struct? t2^)))
                     (let ((T (remq1 t T)))
                       `(,B ,E ,S ((,t) . ,D) ,Y ,N ,T)))
                    (else #f))))
@@ -528,7 +562,8 @@
                 (or
                  (not (terms-pairwise=? pr-a^ pr-d^ t-a^ t-d^ S))
                  (untyped-var? S Y N t-d^)
-                 (pair? t-d^))))
+                 (pair? t-d^)
+                 (struct? t-d^))))
             T))
           (else #f))))))
 
@@ -567,6 +602,11 @@
                                   (td `(,(lhs t) . ,(cdr t2^))))
                               (let ((T `(,ta ,td . ,(remq1 t T))))
                                 `(,B ,E ,S ((,t) . ,D) ,Y ,N ,T))))
+               ((struct? t2^)
+                (let* ([l (vector->list (struct->vector t2^))]
+                       [new-t-els (map (lambda (e) `(,(lhs t) . ,e)) l)]
+                       [T (append new-t-els (remq1 t T))])
+                  `(,B ,E ,S ((,t) . ,D) ,Y ,N ,T)))
                (else #f))))
          T))
       (else c))))
@@ -625,6 +665,9 @@
          (or (term=? u t S)
              (mem-check u (car t) S)
              (mem-check u (cdr t) S)))
+        ((struct? t)
+         (let ([l (vector->list (struct->vector t))])
+           (mem-check u l S)))
         (else (term=? u t S))))))
 
 (define term=?

@@ -9,7 +9,8 @@
          conde conda condu
          symbolo numbero ;; not-pairo
          absento
-         project)
+         project
+         (all-defined-out))
 
 ;; extra stuff for racket
 ;; due mostly to samth
